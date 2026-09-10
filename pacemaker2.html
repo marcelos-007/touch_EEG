@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Touch Pacemaker</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    text-align:center;
+    margin:20px;
+    background:#fafafa;
+}
+
+h1,h2{
+    margin:10px 0;
+}
+
+#card{
+    background:#000;
+    width:300px;
+    height:189px;
+    margin:20px auto;
+    border-radius:8px;
+}
+
+input[type="range"]{
+    width:320px;
+}
+
+input[type="number"]{
+    width:90px;
+    font-size:18px;
+}
+
+button{
+    font-size:18px;
+    padding:10px 16px;
+    margin:5px;
+}
+
+#experiment{
+    display:none;
+}
+
+.track{
+    height:22px;
+    background:#ddd;
+    border-radius:20px;
+    position:relative;
+    margin:50px auto;
+}
+
+.cursor{
+    position:absolute;
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    top:-4px;
+    left:0;
+}
+
+.red{background:#e53935;}
+.blue{background:#1e88e5;}
+.green{background:#43a047;}
+
+.info{
+    margin:15px;
+    font-weight:bold;
+}
+</style>
+</head>
+<body>
+
+<div id="calibration">
+
+    <h1>Touch Pacemaker</h1>
+
+    <h2>Kalibrierung</h2>
+
+    <p>
+        Lege eine Kreditkarte auf den Bildschirm und passe die Breite
+        des schwarzen Rechtecks an.
+    </p>
+
+    <div id="card"></div>
+
+    <input
+        id="slider"
+        type="range"
+        min="150"
+        max="700"
+        value="300">
+
+    <br><br>
+
+    <button id="btnCalibrate">
+        Kalibrierung übernehmen
+    </button>
+
+</div>
+
+<div id="experiment">
+
+    <h2>Pacemaker</h2>
+
+    <div class="info"
+       id="trackInfo">
+    </div>
+
+    <div>
+        Balken 1:
+        <input id="speed1" type="number" value="1" step="0.1">
+        cm/s
+    </div>
+
+    <br>
+
+    <div>
+        Balken 2:
+        <input id="speed2" type="number" value="3" step="0.1">
+        cm/s
+    </div>
+
+    <br>
+
+    <div>
+        Balken 3:
+        <input id="speed3" type="number" value="10" step="0.1">
+        cm/s
+    </div>
+
+    <br>
+
+    <button id="btnStart">Start</button>
+    <button id="btnStop">Stop</button>
+    <button id="btnReset">Reset</button>
+
+    <div id="track1" class="track">
+        <div id="c1" class="cursor red"></div>
+    </div>
+
+    <div id="track2" class="track">
+        <div id="c2" class="cursor blue"></div>
+    </div>
+
+    <div id="track3" class="track">
+        <div id="c3" class="cursor green"></div>
+    </div>
+
+</div>
+
+<script>
+
+const CARD_WIDTH_CM = 8.56;
+const TRACK_LENGTH_CM = 10;
+
+let pixelPerCm = 37.8;
+let running = false;
+let lastTime = 0;
+
+const cursors = [
+    {el:null,pos:0,dir:1,speed:0.5},
+    {el:null,pos:0,dir:1,speed:3},
+    {el:null,pos:0,dir:1,speed:18}
+];
+
+window.addEventListener("load", function(){
+
+    const card = document.getElementById("card");
+    const slider = document.getElementById("slider");
+
+    cursors[0].el = document.getElementById("c1");
+    cursors[1].el = document.getElementById("c2");
+    cursors[2].el = document.getElementById("c3");
+
+    document.getElementById("trackInfo").textContent =
+     "Balkenlänge: " + TRACK_LENGTH_CM + " cm";
+
+    slider.addEventListener("input", function(){
+
+        const w = parseInt(this.value);
+
+        card.style.width = w + "px";
+        card.style.height = (w * 53.98 / 85.6) + "px";
+
+    });
+
+    document.getElementById("btnCalibrate")
+        .addEventListener("click", calibrate);
+
+    document.getElementById("btnStart")
+        .addEventListener("click", startExperiment);
+
+    document.getElementById("btnStop")
+        .addEventListener("click", stopExperiment);
+
+    document.getElementById("btnReset")
+        .addEventListener("click", resetPositions);
+
+});
+
+function calibrate(){
+
+    const slider = document.getElementById("slider");
+
+    const widthPx = parseFloat(slider.value);
+
+    pixelPerCm = widthPx / CARD_WIDTH_CM;
+
+    document.getElementById("calibration")
+        .style.display = "none";
+
+    document.getElementById("experiment")
+        .style.display = "block";
+
+    const trackWidth = TRACK_LENGTH_CM * pixelPerCm;
+
+    document.querySelectorAll(".track")
+        .forEach(track => {
+
+            track.style.width = trackWidth + "px";
+
+        });
+}
+
+function startExperiment(){
+
+    cursors[0].speed =
+        parseFloat(document.getElementById("speed1").value);
+
+    cursors[1].speed =
+        parseFloat(document.getElementById("speed2").value);
+
+    cursors[2].speed =
+        parseFloat(document.getElementById("speed3").value);
+
+    running = true;
+    lastTime = performance.now();
+
+    requestAnimationFrame(update);
+}
+
+function stopExperiment(){
+
+    running = false;
+
+}
+
+function resetPositions(){
+
+    cursors.forEach(c => {
+
+        c.pos = 0;
+        c.dir = 1;
+
+        c.el.style.left = "0px";
+
+    });
+
+}
+
+function update(time){
+
+    if(!running){
+        return;
+    }
+
+    const dt = (time - lastTime) / 1000;
+    lastTime = time;
+
+    const tracks = document.querySelectorAll(".track");
+
+    cursors.forEach((c,index) => {
+
+        const maxPos =
+            tracks[index].clientWidth -
+            c.el.offsetWidth;
+
+        c.pos += c.dir * c.speed * pixelPerCm * dt;
+
+        if(c.pos >= maxPos){
+            c.pos = maxPos;
+            c.dir = -1;
+        }
+
+        if(c.pos <= 0){
+            c.pos = 0;
+            c.dir = 1;
+        }
+
+        c.el.style.left = c.pos + "px";
+
+    });
+
+    requestAnimationFrame(update);
+}
+
+</script>
+
+</body>
+</html>
